@@ -4,10 +4,11 @@ import { doc, onSnapshot, setDoc } from "firebase/firestore";
 
 // ─── constants ────────────────────────────────────────────────────────────────
 const LT = {
-  sick:      { label:"ลาป่วย",     short:"ป่วย",    color:"#ef4444", limit:null },
-  personal:  { label:"ลากิจ",      short:"กิจ",     color:"#f59e0b", limit:null },
-  vacation:  { label:"ลาพักผ่อน", short:"พักร้อน", color:"#3b82f6", limit:10   },
-  maternity: { label:"ลาคลอด",    short:"คลอด",    color:"#ec4899", limit:null },
+  sick:          { label:"ลาป่วย",               short:"ป่วย",       color:"#ef4444", limit:null, days:1   },
+  personal:      { label:"ลากิจ",                short:"กิจ",        color:"#f59e0b", limit:null, days:1   },
+  vacation:      { label:"ลาพักผ่อน (เต็มวัน)",  short:"พักผ่อน",   color:"#3b82f6", limit:10,   days:1   },
+  vacation_half: { label:"ลาพักผ่อน (ครึ่งวัน)", short:"พักผ่อน ½", color:"#60a5fa", limit:null, days:0.5 },
+  maternity:     { label:"ลาคลอด",               short:"คลอด",       color:"#ec4899", limit:null, days:1   },
 };
 const DAYS_TH   = ["อา","จ","อ","พ","พฤ","ศ","ส"];
 const MONTHS_TH = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
@@ -29,6 +30,8 @@ const dim     = (y,m) => new Date(y,m+1,0).getDate();
 const fd      = (y,m) => new Date(y,m,1).getDay();
 const ds      = (y,m,d) => `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
 const usedN   = (p,t,y) => Object.entries(p.leaves).filter(([d,v])=>v===t&&d.startsWith(String(y))).length;
+const vacDaysUsed = (p,y) => usedN(p,"vacation",y) + usedN(p,"vacation_half",y) * 0.5;
+const fmtDays = n => Number.isInteger(n) ? String(n) : `${Math.floor(n)}½`;
 const mkCells = (y,m) => {
   const c=[]; for(let i=0;i<fd(y,m);i++) c.push(null);
   for(let d=1;d<=dim(y,m);d++) c.push(d); return c;
@@ -109,7 +112,7 @@ function PersonPicker({ pharmacists, selectedId, setSelectedId, isAdmin, onAdd, 
 function LeaveSummary({ p, year, isAdmin, showVacationDetail, onCarryover }) {
   const carry    = (p.carryover && p.carryover[year]) || 0;
   const vacTotal = 10 + carry;
-  const vacUsed  = usedN(p, "vacation", year);
+  const vacUsed  = vacDaysUsed(p, year);
   const vacRem   = vacTotal - vacUsed;
   return (
     <Card>
@@ -126,16 +129,16 @@ function LeaveSummary({ p, year, isAdmin, showVacationDetail, onCarryover }) {
             </div>
           );
         })}
-        <div style={{ flex:2, minWidth:180, background:"#0f172a",
-          borderRadius:10, padding:"10px 14px", border:`1px solid ${LT.vacation.color}44` }}>
-          <div style={{ fontSize:10, color:LT.vacation.color, fontWeight:700, marginBottom:8 }}>ลาพักผ่อน</div>
+        <div style={{ flex:2, minWidth:200, background:"#0f172a",
+          borderRadius:10, padding:"12px 14px", border:`1px solid ${LT.vacation.color}44` }}>
+          <div style={{ fontSize:10, color:LT.vacation.color, fontWeight:700, marginBottom:10 }}>🏖 ลาพักผ่อน</div>
           <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"flex-end" }}>
             <div style={{ textAlign:"center" }}>
               <div style={{ fontSize:9, color:"#64748b", marginBottom:2 }}>ปีนี้</div>
               <div style={{ fontSize:18, fontWeight:800, color:"#f1f5f9" }}>10</div>
               <div style={{ fontSize:9, color:"#475569" }}>วัน</div>
             </div>
-            <div style={{ color:"#334155", fontSize:14 }}>+</div>
+            <div style={{ color:"#334155", fontSize:14, paddingBottom:6 }}>+</div>
             <div style={{ textAlign:"center" }}>
               <div style={{ fontSize:9, color:"#64748b", marginBottom:2 }}>วันลาทบ</div>
               {showVacationDetail && isAdmin ? (
@@ -149,21 +152,25 @@ function LeaveSummary({ p, year, isAdmin, showVacationDetail, onCarryover }) {
               )}
               <div style={{ fontSize:9, color:"#475569" }}>วัน</div>
             </div>
-            <div style={{ color:"#334155", fontSize:14 }}>=</div>
+            <div style={{ color:"#334155", fontSize:14, paddingBottom:6 }}>=</div>
             <div style={{ textAlign:"center" }}>
               <div style={{ fontSize:9, color:"#64748b", marginBottom:2 }}>รวม</div>
               <div style={{ fontSize:18, fontWeight:800, color:"#f1f5f9" }}>{vacTotal}</div>
               <div style={{ fontSize:9, color:"#475569" }}>วัน</div>
             </div>
-            <div style={{ flex:1, minWidth:80 }}>
+            <div style={{ flex:1, minWidth:100 }}>
               <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, marginBottom:3 }}>
-                <span style={{ color:"#64748b" }}>ใช้ <b style={{ color:LT.vacation.color }}>{vacUsed}</b></span>
-                <span style={{ color:"#64748b" }}>เหลือ <b style={{ color:vacRem<3?"#ef4444":"#10b981" }}>{vacRem}</b></span>
+                <span style={{ color:"#64748b" }}>ใช้ <b style={{ color:LT.vacation.color }}>{fmtDays(vacUsed)}</b></span>
+                <span style={{ color:"#64748b" }}>เหลือ <b style={{ color:vacRem<3?"#ef4444":"#10b981" }}>{fmtDays(vacRem)}</b></span>
               </div>
               <div style={{ height:5, background:"#1e293b", borderRadius:5, overflow:"hidden" }}>
                 <div style={{ height:"100%", borderRadius:5,
                   width:`${Math.min(100,(vacUsed/vacTotal)*100)}%`,
                   background:vacRem<3?"#ef4444":LT.vacation.color, transition:"width .3s" }}/>
+              </div>
+              <div style={{ display:"flex", gap:8, marginTop:4 }}>
+                <span style={{ fontSize:9, color:LT.vacation.color }}>เต็มวัน {usedN(p,"vacation",year)} ครั้ง</span>
+                <span style={{ fontSize:9, color:LT.vacation_half.color }}>ครึ่งวัน {usedN(p,"vacation_half",year)} ครั้ง</span>
               </div>
             </div>
           </div>
@@ -279,7 +286,7 @@ function CalGrid({ pharmacists, selected, viewMonth, viewYear, setViewMonth, set
                 cursor:isAdmin?"pointer":"default",
                 background:lt?lt.color:isToday?"#172554":"#0f172a",
                 border:isToday&&!lt?"1px solid #3b82f6":"1px solid transparent",
-                transition:"all .15s" }}>
+                transition:"all .15s", opacity:!isAdmin&&!lt?.75:1 }}>
                 <span style={{ fontSize:13, fontWeight:isToday?700:400, color:lt?"#fff":"#cbd5e1" }}>{day}</span>
                 {lt&&<span style={{ fontSize:9, color:"rgba(255,255,255,.85)", marginTop:1 }}>{lt.short}</span>}
               </div>
@@ -356,10 +363,15 @@ function MonthlySummary({ pharmacists, viewMonth, viewYear }) {
     <Card>
       <SectionTitle>สรุปรายคนประจำเดือน {MONTHS_TH[viewMonth]} {viewYear+543}</SectionTitle>
       {pharmacists.map(p=>{
-        const tc = Object.entries(LT).map(([k,lt])=>({
-          k, lt, n: Object.entries(p.leaves).filter(([d,v])=>v===k&&d.startsWith(pfx)).length
+        const vacFull = Object.entries(p.leaves).filter(([d,v])=>v==="vacation"&&d.startsWith(pfx)).length;
+        const vacHalf = Object.entries(p.leaves).filter(([d,v])=>v==="vacation_half"&&d.startsWith(pfx)).length;
+        const vacDays = vacFull + vacHalf * 0.5;
+        const others = ["sick","personal","maternity"].map(k=>({
+          k, lt:LT[k],
+          n: Object.entries(p.leaves).filter(([d,v])=>v===k&&d.startsWith(pfx)).length
         })).filter(x=>x.n>0);
-        const tot = tc.reduce((s,x)=>s+x.n,0);
+        const hasAny = others.length>0 || vacDays>0;
+        const totalDays = others.reduce((s,x)=>s+x.n,0) + vacDays;
         return (
           <div key={p.id} style={{ display:"flex", alignItems:"center", gap:12,
             padding:"9px 12px", borderRadius:10, background:"#0f172a", marginBottom:7 }}>
@@ -370,20 +382,29 @@ function MonthlySummary({ pharmacists, viewMonth, viewYear }) {
             </div>
             <div style={{ flex:1 }}>
               <div style={{ fontSize:13,fontWeight:600 }}>{p.name}</div>
-              {tc.length>0
+              {hasAny
                 ?<div style={{ display:"flex",gap:5,marginTop:3,flexWrap:"wrap" }}>
-                    {tc.map(({k,lt,n})=>(
+                    {others.map(({k,lt,n})=>(
                       <span key={k} style={{ fontSize:11,color:lt.color,
                         background:lt.color+"22",padding:"1px 7px",borderRadius:5,fontWeight:600 }}>
                         {lt.short} {n}
                       </span>
                     ))}
+                    {vacDays>0&&(
+                      <span style={{ fontSize:11,color:LT.vacation.color,
+                        background:LT.vacation.color+"22",padding:"1px 7px",borderRadius:5,fontWeight:600 }}>
+                        {vacFull>0&&vacHalf>0
+                          ? `พักผ่อน ${fmtDays(vacDays)}`
+                          : vacFull>0 ? `${LT.vacation.short} ${vacFull}` : `${LT.vacation_half.short} ${vacHalf}`
+                        }
+                      </span>
+                    )}
                   </div>
                 :<div style={{ fontSize:11,color:"#475569",marginTop:2 }}>ไม่มีการลา</div>
               }
             </div>
-            {tot>0&&<div style={{ fontSize:18,fontWeight:800,color:"#f1f5f9" }}>
-              {tot}<span style={{ fontSize:11,color:"#475569",fontWeight:400 }}> วัน</span>
+            {totalDays>0&&<div style={{ fontSize:18,fontWeight:800,color:"#f1f5f9",whiteSpace:"nowrap" }}>
+              {fmtDays(totalDays)}<span style={{ fontSize:11,color:"#475569",fontWeight:400 }}> วัน</span>
             </div>}
           </div>
         );
@@ -475,7 +496,7 @@ export default function App() {
   const [loading,   setLoading]   = useState(true);
   const [saving,    setSaving]    = useState(false);
 
-  // ── Load & sync from Firestore (real-time) ─────────────────────────────────
+  // ── Load & sync from Firestore ─────────────────────────────────────────────
   useEffect(() => {
     const ref = doc(db, "data", "pharmacists");
     const unsub = onSnapshot(ref, (snap) => {
@@ -558,6 +579,7 @@ export default function App() {
 
   return (
     <div style={{ minHeight:"100vh", background:BG, ...F, color:"#f1f5f9", padding:"20px 16px" }}>
+      <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
       <div style={{ maxWidth:860, margin:"0 auto 20px" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:10 }}>
           <div>
@@ -613,10 +635,6 @@ export default function App() {
                 </Card>
               ):null;
             })()}
-            <PersonPicker pharmacists={pharmas} selectedId={selId}
-              setSelectedId={setSelId} isAdmin={isAdmin} onAdd={addP} onRemove={removeP}/>
-            {sel && <LeaveSummary p={sel} year={viewYear} isAdmin={isAdmin}
-              showVacationDetail={false} onCarryover={updateCarryover}/>}
             <YearPicker viewYear={viewYear} setViewYear={setViewYear}/>
             <CalGrid pharmacists={pharmas} selected={null}
               viewMonth={viewMonth} viewYear={viewYear}
