@@ -4,12 +4,21 @@ import { doc, onSnapshot, setDoc } from "firebase/firestore";
 
 // ─── constants ────────────────────────────────────────────────────────────────
 const LT = {
-  sick:          { label:"ลาป่วย",               short:"ป่วย",       color:"#ef4444", limit:null, days:1   },
-  personal:      { label:"ลากิจ",                short:"กิจ",        color:"#f59e0b", limit:null, days:1   },
-  vacation:      { label:"ลาพักผ่อน (เต็มวัน)",  short:"พักผ่อน",   color:"#3b82f6", limit:10,   days:1   },
-  vacation_half: { label:"ลาพักผ่อน (ครึ่งวัน)", short:"พักผ่อน ½", color:"#60a5fa", limit:null, days:0.5 },
-  maternity:     { label:"ลาคลอด",               short:"คลอด",       color:"#ec4899", limit:null, days:1   },
+  sick:           { label:"ลาป่วย (เต็มวัน)",      short:"ป่วย",      color:"#ef4444", bg:"#7f1d1d", limit:null, days:1,   group:"sick"     },
+  sick_half:      { label:"ลาป่วย (ครึ่งวัน)",     short:"ป่วย ½",    color:"#fca5a5", bg:"#450a0a", limit:null, days:0.5, group:"sick"     },
+  personal:       { label:"ลากิจ (เต็มวัน)",       short:"กิจ",       color:"#f59e0b", bg:"#78350f", limit:null, days:1,   group:"personal" },
+  personal_half:  { label:"ลากิจ (ครึ่งวัน)",      short:"กิจ ½",     color:"#fcd34d", bg:"#451a03", limit:null, days:0.5, group:"personal" },
+  vacation:       { label:"ลาพักผ่อน (เต็มวัน)",   short:"พักผ่อน",  color:"#3b82f6", bg:"#1e3a8a", limit:10,   days:1,   group:"vacation" },
+  vacation_half:  { label:"ลาพักผ่อน (ครึ่งวัน)",  short:"พักผ่อน ½",color:"#93c5fd", bg:"#172554", limit:null, days:0.5, group:"vacation" },
+  maternity:      { label:"ลาคลอด (เต็มวัน)",      short:"คลอด",      color:"#ec4899", bg:"#831843", limit:null, days:1,   group:"maternity"},
+  maternity_half: { label:"ลาคลอด (ครึ่งวัน)",     short:"คลอด ½",    color:"#f9a8d4", bg:"#4a044e", limit:null, days:0.5, group:"maternity"},
 };
+const LT_GROUPS = [
+  { key:"sick",     full:"sick",     half:"sick_half",     label:"ลาป่วย",     color:"#ef4444" },
+  { key:"personal", full:"personal", half:"personal_half", label:"ลากิจ",      color:"#f59e0b" },
+  { key:"vacation", full:"vacation", half:"vacation_half", label:"ลาพักผ่อน", color:"#3b82f6" },
+  { key:"maternity",full:"maternity",half:"maternity_half",label:"ลาคลอด",    color:"#ec4899" },
+];
 const DAYS_TH   = ["อา","จ","อ","พ","พฤ","ศ","ส"];
 const MONTHS_TH = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
 const today     = new Date();
@@ -30,7 +39,12 @@ const dim     = (y,m) => new Date(y,m+1,0).getDate();
 const fd      = (y,m) => new Date(y,m,1).getDay();
 const ds      = (y,m,d) => `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
 const usedN   = (p,t,y) => Object.entries(p.leaves).filter(([d,v])=>v===t&&d.startsWith(String(y))).length;
-const vacDaysUsed = (p,y) => usedN(p,"vacation",y) + usedN(p,"vacation_half",y) * 0.5;
+const groupDays = (p,grp,y) => {
+  const g = LT_GROUPS.find(x=>x.key===grp);
+  if(!g) return 0;
+  return usedN(p,g.full,y) + usedN(p,g.half,y)*0.5;
+};
+const vacDaysUsed = (p,y) => groupDays(p,"vacation",y);
 const fmtDays = n => Number.isInteger(n) ? String(n) : `${Math.floor(n)}½`;
 const mkCells = (y,m) => {
   const c=[]; for(let i=0;i<fd(y,m);i++) c.push(null);
@@ -118,14 +132,25 @@ function LeaveSummary({ p, year, isAdmin, showVacationDetail, onCarryover }) {
     <Card>
       <SectionTitle>สรุปการลา · {p.name} · ปี {year+543}</SectionTitle>
       <div style={{ display:"flex", flexWrap:"wrap", gap:10 }}>
-        {["sick","personal","maternity"].map(key => {
-          const lt = LT[key]; const n = usedN(p, key, year);
+        {["sick","personal","maternity"].map(grpKey => {
+          const g    = LT_GROUPS.find(x=>x.key===grpKey);
+          const full = usedN(p, g.full, year);
+          const half = usedN(p, g.half, year);
+          const tot  = full + half*0.5;
           return (
-            <div key={key} style={{ flex:1, minWidth:80, background:"#0f172a",
-              borderRadius:10, padding:"10px 12px", border:`1px solid ${lt.color}33` }}>
-              <div style={{ fontSize:10, color:lt.color, fontWeight:700, marginBottom:4 }}>{lt.label}</div>
-              <div style={{ fontSize:22, fontWeight:800, color:"#f1f5f9" }}>{n}</div>
-              <div style={{ fontSize:10, color:"#475569" }}>วัน</div>
+            <div key={grpKey} style={{ flex:1, minWidth:90, background:"#0f172a",
+              borderRadius:10, padding:"10px 12px", border:`1px solid ${g.color}33` }}>
+              <div style={{ fontSize:10, color:g.color, fontWeight:700, marginBottom:6 }}>{g.label}</div>
+              <div style={{ fontSize:22, fontWeight:800, color:"#f1f5f9", lineHeight:1 }}>{fmtDays(tot)}</div>
+              <div style={{ fontSize:9, color:"#475569", marginTop:3 }}>วัน</div>
+              {(full>0||half>0)&&(
+                <div style={{ display:"flex", gap:5, marginTop:5, flexWrap:"wrap" }}>
+                  {full>0&&<span style={{ fontSize:9, color:LT[g.full].color, background:LT[g.full].color+"22",
+                    padding:"1px 5px", borderRadius:4 }}>เต็ม {full}</span>}
+                  {half>0&&<span style={{ fontSize:9, color:LT[g.half].color, background:LT[g.half].color+"22",
+                    padding:"1px 5px", borderRadius:4 }}>ครึ่ง {half}</span>}
+                </div>
+              )}
             </div>
           );
         })}
@@ -169,8 +194,8 @@ function LeaveSummary({ p, year, isAdmin, showVacationDetail, onCarryover }) {
                   background:vacRem<3?"#ef4444":LT.vacation.color, transition:"width .3s" }}/>
               </div>
               <div style={{ display:"flex", gap:8, marginTop:4 }}>
-                <span style={{ fontSize:9, color:LT.vacation.color }}>เต็มวัน {usedN(p,"vacation",year)} ครั้ง</span>
-                <span style={{ fontSize:9, color:LT.vacation_half.color }}>ครึ่งวัน {usedN(p,"vacation_half",year)} ครั้ง</span>
+                <span style={{ fontSize:9, color:LT.vacation.color }}>เต็ม {usedN(p,"vacation",year)}</span>
+                <span style={{ fontSize:9, color:LT.vacation_half.color }}>ครึ่ง {usedN(p,"vacation_half",year)}</span>
               </div>
             </div>
           </div>
@@ -180,44 +205,50 @@ function LeaveSummary({ p, year, isAdmin, showVacationDetail, onCarryover }) {
   );
 }
 
-// ─── Year Picker ──────────────────────────────────────────────────────────────
+// ─── Year Picker (dropdown) ───────────────────────────────────────────────────
 function YearPicker({ viewYear, setViewYear }) {
-  const [inp, setInp] = useState(false);
-  const [val, setVal] = useState("");
-  const yrs = []; for(let y=CY-5;y<=CY+5;y++) yrs.push(y);
-  function jump() {
-    const v=parseInt(val);
-    if(!isNaN(v)&&v>1900&&v<2200) setViewYear(v>2500?v-543:v);
-    setInp(false); setVal("");
-  }
-  const btn = (active, onClick, children, extra={}) => (
-    <button onClick={onClick} style={{ padding:"5px 10px", borderRadius:8, border:"none", cursor:"pointer",
-      fontSize:12, ...F, background:active?"#3b82f6":"#0f172a", color:active?"#fff":"#64748b",
-      outline:active?"none":"1px solid #334155", fontWeight:active?700:400, ...extra }}>{children}</button>
-  );
+  const [open, setOpen] = useState(false);
+  const yrs = []; for(let y=CY-10;y<=CY+10;y++) yrs.push(y);
   return (
-    <Card style={{ padding:14 }}>
-      <SectionTitle>เลือกปี</SectionTitle>
-      <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-        {btn(false,()=>setViewYear(y=>y-1),"‹",{fontSize:16})}
-        <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-          {yrs.map(y=>btn(viewYear===y,()=>setViewYear(y),y+543))}
-        </div>
-        {btn(false,()=>setViewYear(y=>y+1),"›",{fontSize:16})}
-        {inp ? (
-          <div style={{ display:"flex", gap:5 }}>
-            <input autoFocus value={val} onChange={e=>setVal(e.target.value)}
-              onKeyDown={e=>{if(e.key==="Enter")jump();if(e.key==="Escape")setInp(false);}}
-              placeholder="ปี พ.ศ." style={{ width:76, padding:"5px 8px", borderRadius:7,
-                border:"1px solid #3b82f6", background:"#0f172a", color:"#38bdf8",
-                fontSize:12, outline:"none", textAlign:"center", ...F }}/>
-            <button onClick={jump} style={{ padding:"5px 8px", borderRadius:7, border:"none",
-              background:"#3b82f6", color:"#fff", fontSize:12, cursor:"pointer", ...F }}>ไป</button>
-            <button onClick={()=>setInp(false)} style={{ padding:"5px 8px", borderRadius:7,
-              border:"1px solid #334155", background:"transparent", color:"#64748b",
-              fontSize:12, cursor:"pointer", ...F }}>✕</button>
+    <Card style={{ padding:"12px 16px" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+        <div style={{ fontSize:11, fontWeight:700, color:"#64748b", letterSpacing:1, whiteSpace:"nowrap" }}>ปี</div>
+        <div style={{ position:"relative" }}>
+          <div onClick={()=>setOpen(o=>!o)} style={{
+            display:"flex", alignItems:"center", gap:8, cursor:"pointer",
+            background:"#0f172a", borderRadius:9, padding:"7px 14px",
+            border:`1px solid ${open?"#3b82f6":"#334155"}`,
+            minWidth:130, userSelect:"none",
+          }}>
+            <span style={{ fontSize:14, fontWeight:700, color:"#f1f5f9", flex:1 }}>พ.ศ. {viewYear+543}</span>
+            <span style={{ fontSize:11, color:"#475569", display:"inline-block",
+              transform:open?"rotate(180deg)":"rotate(0)", transition:"transform .2s" }}>▾</span>
           </div>
-        ) : btn(false,()=>setInp(true),"ระบุปี…")}
+          {open && (
+            <div style={{ position:"absolute", top:"calc(100% + 6px)", left:0, zIndex:50,
+              background:"#0f172a", border:"1px solid #334155", borderRadius:12,
+              boxShadow:"0 12px 32px #00000099", maxHeight:220, overflowY:"auto", minWidth:150 }}>
+              {yrs.map(y=>(
+                <div key={y} onClick={()=>{ setViewYear(y); setOpen(false); }}
+                  style={{ padding:"9px 16px", cursor:"pointer", fontSize:13,
+                    fontWeight:y===viewYear?700:400,
+                    color:y===viewYear?"#38bdf8":"#94a3b8",
+                    background:y===viewYear?"#1e293b":"transparent",
+                    borderBottom:"1px solid #1e293b44" }}
+                  onMouseEnter={e=>{ if(y!==viewYear) e.currentTarget.style.background="#1e293b"; }}
+                  onMouseLeave={e=>{ if(y!==viewYear) e.currentTarget.style.background="transparent"; }}>
+                  พ.ศ. {y+543}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <button onClick={()=>setViewYear(y=>y-1)} style={{ background:"#0f172a", border:"1px solid #334155",
+          color:"#94a3b8", borderRadius:8, width:32, height:32, cursor:"pointer",
+          fontSize:16, display:"flex", alignItems:"center", justifyContent:"center" }}>‹</button>
+        <button onClick={()=>setViewYear(y=>y+1)} style={{ background:"#0f172a", border:"1px solid #334155",
+          color:"#94a3b8", borderRadius:8, width:32, height:32, cursor:"pointer",
+          fontSize:16, display:"flex", alignItems:"center", justifyContent:"center" }}>›</button>
       </div>
     </Card>
   );
@@ -363,15 +394,13 @@ function MonthlySummary({ pharmacists, viewMonth, viewYear }) {
     <Card>
       <SectionTitle>สรุปรายคนประจำเดือน {MONTHS_TH[viewMonth]} {viewYear+543}</SectionTitle>
       {pharmacists.map(p=>{
-        const vacFull = Object.entries(p.leaves).filter(([d,v])=>v==="vacation"&&d.startsWith(pfx)).length;
-        const vacHalf = Object.entries(p.leaves).filter(([d,v])=>v==="vacation_half"&&d.startsWith(pfx)).length;
-        const vacDays = vacFull + vacHalf * 0.5;
-        const others = ["sick","personal","maternity"].map(k=>({
-          k, lt:LT[k],
-          n: Object.entries(p.leaves).filter(([d,v])=>v===k&&d.startsWith(pfx)).length
-        })).filter(x=>x.n>0);
-        const hasAny = others.length>0 || vacDays>0;
-        const totalDays = others.reduce((s,x)=>s+x.n,0) + vacDays;
+        const groups = LT_GROUPS.map(g => {
+          const full = Object.entries(p.leaves).filter(([d,v])=>v===g.full&&d.startsWith(pfx)).length;
+          const half = Object.entries(p.leaves).filter(([d,v])=>v===g.half&&d.startsWith(pfx)).length;
+          const days = full + half*0.5;
+          return { g, full, half, days };
+        }).filter(x=>x.days>0);
+        const totalDays = groups.reduce((s,x)=>s+x.days, 0);
         return (
           <div key={p.id} style={{ display:"flex", alignItems:"center", gap:12,
             padding:"9px 12px", borderRadius:10, background:"#0f172a", marginBottom:7 }}>
@@ -382,30 +411,26 @@ function MonthlySummary({ pharmacists, viewMonth, viewYear }) {
             </div>
             <div style={{ flex:1 }}>
               <div style={{ fontSize:13,fontWeight:600 }}>{p.name}</div>
-              {hasAny
+              {groups.length>0
                 ?<div style={{ display:"flex",gap:5,marginTop:3,flexWrap:"wrap" }}>
-                    {others.map(({k,lt,n})=>(
-                      <span key={k} style={{ fontSize:11,color:lt.color,
-                        background:lt.color+"22",padding:"1px 7px",borderRadius:5,fontWeight:600 }}>
-                        {lt.short} {n}
-                      </span>
-                    ))}
-                    {vacDays>0&&(
-                      <span style={{ fontSize:11,color:LT.vacation.color,
-                        background:LT.vacation.color+"22",padding:"1px 7px",borderRadius:5,fontWeight:600 }}>
-                        {vacFull>0&&vacHalf>0
-                          ? `พักผ่อน ${fmtDays(vacDays)}`
-                          : vacFull>0 ? `${LT.vacation.short} ${vacFull}` : `${LT.vacation_half.short} ${vacHalf}`
+                    {groups.map(({g,full,half,days})=>(
+                      <span key={g.key} style={{ fontSize:11, color:g.color,
+                        background:g.color+"22", padding:"1px 7px", borderRadius:5, fontWeight:600 }}>
+                        {g.key==="vacation"
+                          ? (full>0&&half>0 ? `พักผ่อน ${fmtDays(days)}` : full>0 ? `พักผ่อน ${full}` : `พักผ่อน ½`)
+                          : `${LT[g.full].short} ${fmtDays(days)}`
                         }
                       </span>
-                    )}
+                    ))}
                   </div>
                 :<div style={{ fontSize:11,color:"#475569",marginTop:2 }}>ไม่มีการลา</div>
               }
             </div>
-            {totalDays>0&&<div style={{ fontSize:18,fontWeight:800,color:"#f1f5f9",whiteSpace:"nowrap" }}>
-              {fmtDays(totalDays)}<span style={{ fontSize:11,color:"#475569",fontWeight:400 }}> วัน</span>
-            </div>}
+            {totalDays>0&&(
+              <div style={{ fontSize:18,fontWeight:800,color:"#f1f5f9",whiteSpace:"nowrap" }}>
+                {fmtDays(totalDays)}<span style={{ fontSize:11,color:"#475569",fontWeight:400 }}> วัน</span>
+              </div>
+            )}
           </div>
         );
       })}
@@ -626,7 +651,7 @@ export default function App() {
                     {now.map((x,i)=>(
                       <div key={i} style={{ display:"flex",alignItems:"center",gap:6,
                         background:"#0f172a",borderRadius:8,padding:"6px 12px",border:`1px solid ${LT[x.t].color}44` }}>
-                        <div style={{ width:6,height:6,borderRadius:"50%",background:LT[x.t].color }}/>
+                        <div style={{ width:6,height:6,borderRadius:"50%",background:LT[x.t].color}}/>
                         <span style={{ fontSize:13 }}>{x.name}</span>
                         <span style={{ fontSize:11,color:LT[x.t].color,fontWeight:600 }}>{LT[x.t].label}</span>
                       </div>
