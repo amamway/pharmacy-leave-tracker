@@ -69,16 +69,19 @@ const mkCells   = (y,m) => {
 function applyAutoCarry(pharmas) {
   const cur = currentCycle();
   return pharmas.map(p => {
-    const cycles = new Set();
-    Object.keys(p.leaves||{}).forEach(d => cycles.add(cycleOfDate(d)));
-    Object.keys(p.carryover||{}).forEach(y => cycles.add(parseInt(y)));
-    if (p.joinCycle) cycles.add(p.joinCycle);
-    if (!cycles.size) return p;
+    // หารอบที่มีการลาจริงๆ (ไม่รวม carryover keys เพื่อกันทับ)
+    const leaveCycles = new Set();
+    Object.keys(p.leaves||{}).forEach(d => leaveCycles.add(cycleOfDate(d)));
+    if (p.joinCycle) leaveCycles.add(p.joinCycle);
+    if (!leaveCycles.size) return p; // ไม่มีข้อมูลการลาเลย ไม่ต้องทำอะไร
 
-    const earliest = Math.min(...cycles);
+    const earliest = Math.min(...leaveCycles);
+    // เริ่ม loop จาก earliest → cur-1
+    // carryover ของรอบ earliest ใช้ค่าที่มีอยู่แล้ว (admin กรอกเอง) ไม่แตะ
+    // loop คำนวณ carry จาก earliest → ทบเข้า earliest+1 → earliest+2 → ... → cur
     const newCarry = { ...p.carryover };
     for (let cy = earliest; cy < cur; cy++) {
-      const carry  = getCarry({ carryover: newCarry }, cy);
+      const carry  = getCarry({ carryover: newCarry }, cy); // carryover ของรอบนี้ (รอบแรก = admin กรอก, รอบถัดไป = คำนวณ)
       const total  = VAC_BASE + carryDays(carry);
       const used   = vacUsed({ leaves: p.leaves, carryover: newCarry }, cy);
       const rem    = Math.max(0, total - used);
