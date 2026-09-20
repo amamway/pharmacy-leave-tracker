@@ -69,21 +69,25 @@ const mkCells   = (y,m) => {
 function applyAutoCarry(pharmas) {
   const cur = currentCycle();
   return pharmas.map(p => {
-    // หารอบที่มีการลาจริงๆ (ไม่รวม carryover keys เพื่อกันทับ)
-    const leaveCycles = new Set();
-    Object.keys(p.leaves||{}).forEach(d => leaveCycles.add(cycleOfDate(d)));
-    if (p.joinCycle) leaveCycles.add(p.joinCycle);
-    if (!leaveCycles.size) return p; // ไม่มีข้อมูลการลาเลย ไม่ต้องทำอะไร
+    // รวบรวมรอบที่รู้จักทั้งหมด: จากวันลา + carryover ที่ admin กรอก + joinCycle
+    const knownCycles = new Set();
+    Object.keys(p.leaves||{}).forEach(d => knownCycles.add(cycleOfDate(d)));
+    Object.keys(p.carryover||{}).forEach(y => knownCycles.add(parseInt(y)));
+    if (p.joinCycle) knownCycles.add(p.joinCycle);
+    if (!knownCycles.size) return p; // ไม่มีข้อมูลอะไรเลย ไม่ต้องทำอะไร
 
-    const earliest = Math.min(...leaveCycles);
-    // เริ่ม loop จาก earliest → cur-1
-    // carryover ของรอบ earliest ใช้ค่าที่มีอยู่แล้ว (admin กรอกเอง) ไม่แตะ
-    // loop คำนวณ carry จาก earliest → ทบเข้า earliest+1 → earliest+2 → ... → cur
+    const earliest = Math.min(...knownCycles);
+    if (earliest >= cur) return p; // รอบแรกสุดคือปัจจุบันหรืออนาคต ยังไม่มีอะไรต้องทบ
+
+    // copy carryover เดิม (admin อาจกรอก carryover รอบ earliest ไว้)
+    // loop ตั้งแต่ earliest ทบไปข้างหน้าจนถึงรอบก่อนปัจจุบัน
+    // carryover[earliest] = ค่าที่ admin กรอก (ไม่แตะ)
+    // carryover[earliest+1], [earliest+2], ... = คำนวณอัตโนมัติ (เขียนทับ)
     const newCarry = { ...p.carryover };
     for (let cy = earliest; cy < cur; cy++) {
-      const carry  = getCarry({ carryover: newCarry }, cy); // carryover ของรอบนี้ (รอบแรก = admin กรอก, รอบถัดไป = คำนวณ)
+      const carry  = getCarry({ carryover: newCarry }, cy);
       const total  = VAC_BASE + carryDays(carry);
-      const used   = vacUsed({ leaves: p.leaves, carryover: newCarry }, cy);
+      const used   = vacUsed({ leaves: p.leaves||{} }, cy);
       const rem    = Math.max(0, total - used);
       const capped = Math.min(rem, VAC_CARRY_CAP);
       newCarry[cy+1] = { whole: Math.floor(capped), half: (capped % 1) >= 0.5 ? 1 : 0 };
@@ -370,9 +374,8 @@ function LeaveSummary({ p, viewCycle, isAdmin, onCarryover }) {
               {fmtDays(cappedRem)} วัน
             </span>
             {rem > VAC_CARRY_CAP && (
-              <span style={{ fontSize:9, color:"#fbbf24" }}>(เหลือจริง {fmtDays(rem)} ตัดเพดาน {VAC_CARRY_CAP})</span>
+              <span style={{ fontSize:9, color:"#fbbf24" }}>(เหลือจริง {fmtDays(rem)} วัน → ตัดเพดานเหลือ {VAC_CARRY_CAP})</span>
             )}
-            <span style={{ fontSize:9, color:"#475569" }}>({nxWhole} เต็ม{nxHalf?" + ½":""})</span>
           </div>
         </div>
       </div>
